@@ -21,7 +21,6 @@ import org.mozilla.javascript.annotations.{JSFunction, JSGetter}
 import org.mozilla.javascript.{Context, Scriptable, ScriptableObject, Function => JFunction}
 import play.api.i18n.MessagesApi
 import play.api.mvc.RequestHeader
-import play.api.routing.JavaScriptReverseRouter
 import views.html.helper.CSRF
 
 class NunjucksHelperModule extends NodeModule {
@@ -50,35 +49,6 @@ class NunjucksHelper extends ScriptableObject {
 object NunjucksHelper {
 
   val className = "_nunjucksHelper"
-
-  private val routesInitScript =
-    """
-      |var routes = {};
-      |
-      |function isObject(item) {
-      |  return (item && typeof item === 'object' && !Array.isArray(item));
-      |}
-      |
-      |function mergeDeep(target, source) {
-      |
-      |  for (var key in source) {
-      |    if (isObject(source[key])) {
-      |      if (!target[key]) {
-      |        var obj = {};
-      |        obj[key] = {};
-      |        Object.assign(target, obj);
-      |      }
-      |      mergeDeep(target[key], source[key]);
-      |    } else {
-      |      var obj = {};
-      |      obj[key] = source[key];
-      |      Object.assign(target, obj);
-      |    }
-      |  }
-      |
-      |  return target;
-      |}
-      |""".stripMargin
 
   @JSFunction
   def messages(cx: Context, thisObj: Scriptable, args: Array[AnyRef], fn: JFunction): String = {
@@ -132,30 +102,10 @@ object NunjucksHelper {
 
     val cx = Context.getCurrentContext
 
-    val configuration: NunjucksConfiguration = cx
-      .getThreadLocal("configuration")
-      .asInstanceOf[NunjucksConfiguration]
-
     val routesHelper: NunjucksRoutesHelper = cx
       .getThreadLocal("reverseRoutes")
       .asInstanceOf[NunjucksRoutesHelper]
 
-    val scope = {
-      val context = Context.enter()
-      val scope   = context.initSafeStandardObjects(null, true)
-      Context.exit()
-      scope
-    }
-
-    cx.evaluateString(scope, routesInitScript, "init_routes", 0, null)
-
-    // we need to batch routes as trireme fails to run the script if it's too large
-    routesHelper.routes.sliding(100).foreach { batch =>
-      val script = JavaScriptReverseRouter("batch", None, configuration.absoluteBaseUrl, batch: _*).toString
-      cx.evaluateString(scope, s"(function () { $script; mergeDeep(routes, batch); })();", "batch", 0, null);
-    }
-
-    cx.evaluateString(scope, "routes", "routes", 0, null)
-      .asInstanceOf[Scriptable]
+    routesHelper.routes
   }
 }

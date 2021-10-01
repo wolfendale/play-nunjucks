@@ -17,21 +17,78 @@
 package uk.gov.hmrc.nunjucks
 
 import better.files._
+import org.mozilla.javascript.{Context, Scriptable}
 import play.api.Environment
-import play.api.routing.JavaScriptReverseRoute
+import play.api.routing.{JavaScriptReverseRoute, JavaScriptReverseRouter}
 
 import java.net.URLClassLoader
 import javax.inject.{Inject, Singleton}
 import scala.util.Try
 
 trait NunjucksRoutesHelper {
-  def routes: Seq[JavaScriptReverseRoute]
+
+  private val routesInitScript =
+    """
+      |var routes = {};
+      |
+      |function isObject(item) {
+      |  return (item && typeof item === 'object' && !Array.isArray(item));
+      |}
+      |
+      |function mergeDeep(target, source) {
+      |
+      |  for (var key in source) {
+      |    if (isObject(source[key])) {
+      |      if (!target[key]) {
+      |        var obj = {};
+      |        obj[key] = {};
+      |        Object.assign(target, obj);
+      |      }
+      |      mergeDeep(target[key], source[key]);
+      |    } else {
+      |      var obj = {};
+      |      obj[key] = source[key];
+      |      Object.assign(target, obj);
+      |    }
+      |  }
+      |
+      |  return target;
+      |}
+      |""".stripMargin
+
+  def routes: Scriptable = {
+    val cx = Context.getCurrentContext
+
+    val configuration: NunjucksConfiguration = cx
+      .getThreadLocal("configuration")
+      .asInstanceOf[NunjucksConfiguration]
+
+    val scope = {
+      val context = Context.enter()
+      val scope   = context.initSafeStandardObjects(null, true)
+      Context.exit()
+      scope
+    }
+
+    cx.evaluateString(scope, routesInitScript, "init_routes", 0, null)
+
+    // we need to batch routes as trireme fails to run the script if it's too large
+    getRoutes.sliding(100).foreach { batch =>
+      val script = JavaScriptReverseRouter("batch", None, configuration.absoluteBaseUrl, batch: _*).toString
+      cx.evaluateString(scope, s"(function () { $script; mergeDeep(routes, batch); })();", "batch", 0, null);
+    }
+
+    cx.evaluateString(scope, "routes", "routes", 0, null)
+      .asInstanceOf[Scriptable]
+  }
+
+  def getRoutes: Seq[JavaScriptReverseRoute]
 }
 
 @Singleton
 class ProductionNunjucksRoutesHelper @Inject() extends NunjucksRoutesHelper {
 
-  lazy val routes: Seq[JavaScriptReverseRoute] =
+  lazy val getRoutes: Seq[JavaScriptReverseRoute] =
     Package.getPackages
       .map(_.getName)
       .flatMap(p => Try(Class.forName(s"$p.routes$$javascript").getDeclaredFields).toOption)
@@ -52,7 +109,7 @@ class ProductionNunjucksRoutesHelper @Inject() extends NunjucksRoutesHelper {
 
 class DevelopmentNunjucksRoutesHelper @Inject() (environment: Environment) extends NunjucksRoutesHelper {
 
-  override def routes: Seq[JavaScriptReverseRoute] = {
+  override def getRoutes: Seq[JavaScriptReverseRoute] = {
 
     val routesUrls = environment.rootPath.toScala.glob("target/*/classes").toList.filter(_.isDirectory).map(_.url)
 

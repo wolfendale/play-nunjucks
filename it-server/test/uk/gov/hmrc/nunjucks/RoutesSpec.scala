@@ -100,7 +100,7 @@ class RoutesSpec extends FreeSpec with MustMatchers
       // different batches, this proves that the merging doesn't
       // break routes on the same controller in different batches
       val routesHelper = new NunjucksRoutesHelper {
-        override val routes: Seq[JavaScriptReverseRoute] =
+        override val getRoutes: Seq[JavaScriptReverseRoute] =
           JavaScriptReverseRoute("controllers.TestController.one", """function() { return _wA({method: "GET", url: "/" + "one"}) }""") ::
           (0 to 1000).map(i => JavaScriptReverseRoute(i.toString, i.toString)).toList :::
           JavaScriptReverseRoute("controllers.TestController.two", """function() { return _wA({method: "GET", url: "/" + "two"}) }""") ::
