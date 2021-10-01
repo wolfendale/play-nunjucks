@@ -76,6 +76,9 @@ class RoutesSpec extends FreeSpec with MustMatchers
 
         val result = renderer.render("routes.njk").futureValue
         result.toString mustEqual "/ok"
+
+        val absoluteResult = renderer.render("absolute.njk").futureValue
+        absoluteResult.toString mustEqual "http://localhost/ok"
       }
 
       "must be able to be rendered with parameters" in {
