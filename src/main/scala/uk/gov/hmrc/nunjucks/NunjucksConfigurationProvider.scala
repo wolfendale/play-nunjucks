@@ -44,10 +44,14 @@ class NunjucksConfigurationProvider @Inject() (
     val noCache =
       configuration.get[Boolean]("nunjucks.noCache")
 
+    val absoluteBaseUrl =
+      configuration.get[String]("nunjucks.absoluteBaseUrl")
+
     NunjucksConfiguration(
       viewPaths = viewPaths,
       libPaths = libPaths,
       threadCount = threadCount,
+      absoluteBaseUrl = absoluteBaseUrl,
       noCache = noCache
     )
   }

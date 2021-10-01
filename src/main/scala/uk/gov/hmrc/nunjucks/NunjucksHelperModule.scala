@@ -132,9 +132,9 @@ object NunjucksHelper {
 
     val cx = Context.getCurrentContext
 
-    val request: RequestHeader = cx
-      .getThreadLocal("request")
-      .asInstanceOf[RequestHeader]
+    val configuration: NunjucksConfiguration = cx
+      .getThreadLocal("configuration")
+      .asInstanceOf[NunjucksConfiguration]
 
     val routesHelper: NunjucksRoutesHelper = cx
       .getThreadLocal("reverseRoutes")
@@ -151,7 +151,7 @@ object NunjucksHelper {
 
     // we need to batch routes as trireme fails to run the script if it's too large
     routesHelper.routes.sliding(100).foreach { batch =>
-      val script = JavaScriptReverseRouter("batch")(batch: _*)(request).toString
+      val script = JavaScriptReverseRouter("batch", None, configuration.absoluteBaseUrl, batch: _*).toString
       cx.evaluateString(scope, s"(function () { $script; mergeDeep(routes, batch); })();", "batch", 0, null);
     }
 
